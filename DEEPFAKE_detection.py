@@ -53,56 +53,66 @@ for model_name in model_names:
 
     data_transforms = get_transforms(model_name)
 
+    # Prepare datasets for training and validation
     train_dataset = datasets.ImageFolder(train_dir, data_transforms['train'])
     val_dataset = datasets.ImageFolder(val_dir, data_transforms['valid'])
 
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 
+    # Define loss and optimizer
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
+    # Set GPU if possible (CUDA available)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
+    # Define training parameters
     num_epochs = 40
     best_model_wts = model.state_dict()
     best_acc = 0.0
 
+    # Data storing lists
     train_losses, train_accuracies = [], []
     val_losses, val_accuracies = [], []
     epoch_times, ram_usage = [], []
 
+    # Training
     for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
         start_time = time.time()
 
         for phase in ['train', 'valid']:
             if phase == 'train':
-                model.train()
+                model.train()           # Set model to training
                 dataloader = train_loader
             else:
-                model.eval()
+                model.eval()            # Set model to evaluation mode
                 dataloader = val_loader
 
             running_loss = 0.0
             running_corrects = 0
 
+            # Loop over batches
             for inputs, labels in dataloader:
                 inputs = inputs.to(device)
                 labels = labels.to(device).float().unsqueeze(1)
 
                 optimizer.zero_grad()
 
+                # Forward pass
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
                     preds = torch.sigmoid(outputs)
                     loss = criterion(outputs, labels)
 
+                    # Backward pass and optimization
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
 
+                # Accumulate loss and correct predicitons
                 running_loss += loss.item() * inputs.size(0)
                 preds = (preds > 0.5).float()
                 running_corrects += torch.sum(preds == labels.data)
@@ -110,6 +120,7 @@ for model_name in model_names:
             epoch_loss = running_loss / len(dataloader.dataset)
             epoch_acc = running_corrects.double() / len(dataloader.dataset)
 
+            # Save data for future plot
             if phase == 'train':
                 train_losses.append(epoch_loss)
                 train_accuracies.append(epoch_acc.cpu())  
@@ -119,10 +130,12 @@ for model_name in model_names:
 
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
+            # Save best model based on validation accuracy
             if phase == 'valid' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = model.state_dict()
 
+        # End of epoch- time and ram usage tracking
         end_time = time.time()
         epoch_times.append(end_time - start_time)
         ram_usage.append(psutil.virtual_memory().used / (1024 ** 3))  # RAM usage in GB
